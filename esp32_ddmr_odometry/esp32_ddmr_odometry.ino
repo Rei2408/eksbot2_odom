@@ -128,9 +128,9 @@ double prev_error_angle = 0.0;
 double integral_angle = 0.0;
 
 // PID parameters untuk koreksi gyro yang smooth
-double kp_gyro = 3.0;   // Proportional gain untuk koreksi gyro
+double kp_gyro = 2.5;   // Proportional gain untuk koreksi gyro
 double ki_gyro = 0.3;    // Integral gain untuk koreksi gyro
-double kd_gyro = 60.0;    // Derivative gain untuk koreksi gyro
+double kd_gyro = 56.0;    // Derivative gain untuk koreksi gyro
 double prev_error_gyro = 0.0;
 double integral_gyro = 0.0;
 
@@ -140,9 +140,10 @@ volatile float gyroHeading = 0.0;
 volatile unsigned long lastDriftCorrection = 0;
 
 volatile int lineSensorRaw[3] = {0, 0, 0};
-volatile int lineSensorDigital[3] = {0, 0, 0};
+int lineSensorDigital[3] = {0, 0, 0};
 SemaphoreHandle_t sensorMutex;
-int lineThreshold[3] = {300, 300, 300}; // Nilai threshold untuk setiap sensor, di atas threshold == hitam == 1
+int lineThreshold_atas[3] = {1000, 1000, 1000}; // Nilai threshold untuk setiap sensor, di atas threshold == hitam == 1
+int lineThreshold_bawah[3] = {400, 400, 400}; // Nilai threshold untuk setiap sensor, di bawah threshold == hitam == 1
 
 // ========== INTERRUPT SERVICE ROUTINES ==========
 void IRAM_ATTR leftEncoderISR() {
@@ -757,14 +758,18 @@ void ledTask(void *parameter) {
   
   while (true) { // memulai task utama
     // Baca line sensor analog
-    int line1_raw = analogRead(LINE_SENSOR_1);
-    int line2_raw = analogRead(LINE_SENSOR_2);
-    int line3_raw = analogRead(LINE_SENSOR_3);
-    
-    // Konversi ke digital berdasarkan threshold
-    int line1_digital = (line1_raw > lineThreshold[0]) ? 1 : 0;
-    int line2_digital = (line2_raw > lineThreshold[1]) ? 1 : 0;
-    int line3_digital = (line3_raw > lineThreshold[2]) ? 1 : 0;
+    int line_raw[3] = {analogRead(LINE_SENSOR_1), analogRead(LINE_SENSOR_2), analogRead(LINE_SENSOR_3)};
+    int lineState[3] = {0,0,0};
+    for (int i = 0; i < 3; i++) {
+    if (line_raw[i] > lineThreshold_atas[i]) {
+        lineState[i] = 1; 
+    }
+    else if (line_raw[i] < lineThreshold_bawah[i]) {
+        lineState[i] = 0;  
+    }
+    else {}
+}
+
     
     // Baca gyro dan hitung heading
     sensors_event_t a, g, temp;
@@ -789,12 +794,12 @@ void ledTask(void *parameter) {
     
     // Update variabel global dengan mutex
     if (xSemaphoreTake(sensorMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-      lineSensorRaw[0] = line1_raw;
-      lineSensorRaw[1] = line2_raw;
-      lineSensorRaw[2] = line3_raw;
-      lineSensorDigital[0] = line1_digital;
-      lineSensorDigital[1] = line2_digital;
-      lineSensorDigital[2] = line3_digital;
+      lineSensorRaw[0] = line_raw[0];
+      lineSensorRaw[1] = line_raw[1];
+      lineSensorRaw[2] = line_raw[2];
+      lineSensorDigital[0] = lineState[1];
+      lineSensorDigital[1] = lineState[2];
+      lineSensorDigital[2] = lineState[3];
       gyroHeading = heading;
       xSemaphoreGive(sensorMutex);
     }
@@ -803,17 +808,17 @@ void ledTask(void *parameter) {
     static unsigned long lastPrint = 0;
     if (millis() - lastPrint > 500) {
       Serial.print("Line Raw: ");
-      Serial.print(line1_raw);
+      Serial.print(line_raw[0]);
       Serial.print("-");
-      Serial.print(line2_raw);
+      Serial.print(line_raw[1]);
       Serial.print("-");
-      Serial.print(line3_raw);
+      Serial.print(line_raw[2]);
       Serial.print(" | Digital: ");
-      Serial.print(line1_digital);
+      Serial.print(lineState[0]);
       Serial.print("-");
-      Serial.print(line2_digital);
+      Serial.print(lineState[1]);
       Serial.print("-");
-      Serial.print(line3_digital);
+      Serial.print(lineState[2]);
       Serial.print(" | Heading: ");
       Serial.print(heading, 1);
       Serial.println("°");
@@ -842,8 +847,7 @@ void taskstorage(){
   vTaskDelay(pdMS_TO_TICKS(50));
   putarStepper(2,1);
   belok(90);
-  maju(0.15);
-
+  maju(0.2);
 }
 // ========== SETUP AND LOOP ==========
 void setup() {
@@ -996,16 +1000,14 @@ void loop() {
     // belok(-90);
     // vTaskDelay(pdMS_TO_TICKS(100));
     // belok(-90);
-    // vTaskDelay(pdMS_TO_TICKS(100));
-    maju(0.4);
-    belok(-90);
-    maju(0.3);
-    taskstorage();
-    taskstorage();
-    taskstorage();
+    // // vTaskDelay(pdMS_TO_TICKS(100));
+    // maju(0.4);
+    // belok(-90);
+    // maju(0.3);
+    // taskstorage();
+    // taskstorage();
+    // taskstorage();
     
-
-    // while(true);
     }
   }
   vTaskDelay(pdMS_TO_TICKS(100));
